@@ -797,7 +797,7 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
 
   SCOPED_MDC_PRIMARY(std::to_string(currentPrimary()));
   SCOPED_MDC_SEQ_NUM(std::to_string(msgSeqNum));
-  LOG_DEBUG(MSGS, KVLOG(msg->senderId(), msg->size()));
+  LOG_INFO(MSGS, KVLOG(msg->senderId(), msg->size()));
   auto span = concordUtils::startChildSpanFromContext(msg->spanContext<std::remove_pointer<decltype(msg)>::type>(),
                                                       "handle_bft_preprepare");
   span.setTag("rid", config_.getreplicaId());
@@ -1057,9 +1057,9 @@ void ReplicaImp::sendPartialProof(SeqNumInfo &seqNumInfo) {
 
   if (!partialProofs.hasFullProof()) {
     // send PartialCommitProofMsg to all collectors
-    LOG_DEBUG(MSGS,
-              "Sending PartialCommitProofMsg, sequence number:" << pp->seqNumber() << ", commit path: "
-                                                                << CommitPathToStr(pp->firstPath()));
+    LOG_INFO(MSGS,
+             "Sending PartialCommitProofMsg, sequence number:" << pp->seqNumber() << ", commit path: "
+                                                               << CommitPathToStr(pp->firstPath()));
 
     PartialCommitProofMsg *part = partialProofs.getSelfPartialCommitProof();
 
@@ -1178,9 +1178,9 @@ void ReplicaImp::onMessage<PartialCommitProofMsg>(PartialCommitProofMsg *msg) {
   ConcordAssert(repsInfo->isIdOfPeerReplica(msgSender));
   ConcordAssert(repsInfo->isCollectorForPartialProofs(msgView, msgSeqNum));
 
-  LOG_DEBUG(MSGS,
-            "Received PartialCommitProofMsg. " << KVLOG(msgSender, msgSeqNum, msg->size())
-                                               << ", commit path: " << CommitPathToStr(msg->commitPath()));
+  LOG_INFO(MSGS,
+           "Received PartialCommitProofMsg. " << KVLOG(msgSender, msgSeqNum, msg->size())
+                                              << ", commit path: " << CommitPathToStr(msg->commitPath()));
 
   auto span = concordUtils::startChildSpanFromContext(msg->spanContext<std::remove_pointer<decltype(msg)>::type>(),
                                                       "bft_handle_partial_commit_proof_msg");
@@ -1217,10 +1217,10 @@ void ReplicaImp::onMessage<FullCommitProofMsg>(FullCommitProofMsg *msg) {
   SCOPED_MDC_SEQ_NUM(std::to_string(msg->seqNumber()));
   SCOPED_MDC_PATH(CommitPathToMDCString(CommitPath::OPTIMISTIC_FAST));
 
-  LOG_DEBUG(CNSUS,
-            "Reached consensus, Received FullCommitProofMsg message. "
-                << KVLOG(msg->senderId(), msgSeqNum, msg->size())
-                << ", commit path: " << CommitPathToStr(CommitPath::OPTIMISTIC_FAST));
+  LOG_INFO(CNSUS,
+           "Reached consensus, Received FullCommitProofMsg message. "
+               << KVLOG(msg->senderId(), msgSeqNum, msg->size())
+               << ", commit path: " << CommitPathToStr(CommitPath::OPTIMISTIC_FAST));
 
   if (relevantMsgForActiveView(msg)) {
     SeqNumInfo &seqNumInfo = mainLog->get(msgSeqNum);
@@ -1440,9 +1440,9 @@ void ReplicaImp::onMessage<PreparePartialMsg>(PreparePartialMsg *msg) {
 
     sendAckIfNeeded(msg, msgSender, msgSeqNum);
 
-    LOG_DEBUG(MSGS,
-              "Received relevant PreparePartialMsg. " << KVLOG(msgSender, msgSeqNum, msg->size())
-                                                      << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
+    LOG_INFO(MSGS,
+             "Received relevant PreparePartialMsg. " << KVLOG(msgSender, msgSeqNum, msg->size())
+                                                     << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
 
     controller->onMessage(msg);
 
@@ -1493,9 +1493,9 @@ void ReplicaImp::onMessage<CommitPartialMsg>(CommitPartialMsg *msg) {
 
     sendAckIfNeeded(msg, msgSender, msgSeqNum);
 
-    LOG_DEBUG(MSGS,
-              "Received CommitPartialMsg. " << KVLOG(msgSender, msgSeqNum, msg->size())
-                                            << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
+    LOG_INFO(MSGS,
+             "Received CommitPartialMsg. " << KVLOG(msgSender, msgSeqNum, msg->size())
+                                           << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
 
     SeqNumInfo &seqNumInfo = mainLog->get(msgSeqNum);
 
@@ -1534,9 +1534,9 @@ void ReplicaImp::onMessage<PrepareFullMsg>(PrepareFullMsg *msg) {
   if (relevantMsgForActiveView(msg)) {
     sendAckIfNeeded(msg, msgSender, msgSeqNum);
 
-    LOG_DEBUG(MSGS,
-              "Received PrepareFullMsg. " << KVLOG(msgSender, msgSeqNum, msg->size())
-                                          << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
+    LOG_INFO(MSGS,
+             "Received PrepareFullMsg. " << KVLOG(msgSender, msgSeqNum, msg->size())
+                                         << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
 
     SeqNumInfo &seqNumInfo = mainLog->get(msgSeqNum);
 
@@ -1578,9 +1578,9 @@ void ReplicaImp::onMessage<CommitFullMsg>(CommitFullMsg *msg) {
   if (relevantMsgForActiveView(msg)) {
     sendAckIfNeeded(msg, msgSender, msgSeqNum);
 
-    LOG_DEBUG(MSGS,
-              "Received CommitFullMsg. " << KVLOG(msgSender, msgSeqNum, msg->size())
-                                         << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
+    LOG_INFO(MSGS,
+             "Received CommitFullMsg. " << KVLOG(msgSender, msgSeqNum, msg->size())
+                                        << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
 
     SeqNumInfo &seqNumInfo = mainLog->get(msgSeqNum);
 
@@ -3359,9 +3359,9 @@ void ReplicaImp::onMessage<ReplicaRestartReadyMsg>(ReplicaRestartReadyMsg *msg) 
     restart_msgs[msg->idOfGeneratedReplica()] = std::make_unique<ReplicaRestartReadyMsg>(msg);
     metric_received_restart_ready_++;
   } else {
-    LOG_DEBUG(GL,
-              "Recieved multiple ReplicaRestartReadyMsg from sender_id "
-                  << std::to_string(msg->idOfGeneratedReplica()) << " with seq_num" << std::to_string(msg->seqNum()));
+    LOG_INFO(GL,
+             "Recieved multiple ReplicaRestartReadyMsg from sender_id "
+                 << std::to_string(msg->idOfGeneratedReplica()) << " with seq_num" << std::to_string(msg->seqNum()));
     delete msg;
   }
   LOG_INFO(GL,
