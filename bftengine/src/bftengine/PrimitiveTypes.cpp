@@ -24,8 +24,9 @@ std::string CommitPathToMDCString(CommitPath path) {
     case CommitPath::NA:
       return "NA";
     case CommitPath::OPTIMISTIC_FAST:
+      return "fast-optimistic";
     case CommitPath::FAST_WITH_THRESHOLD:
-      return "fast";
+      return "fast-threshold";
     case CommitPath::SLOW:
       return "slow";
     default:
