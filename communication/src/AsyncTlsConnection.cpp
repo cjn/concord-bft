@@ -179,7 +179,7 @@ uint32_t AsyncTlsConnection::getReadMsgSize() {
 void AsyncTlsConnection::remoteDispose() {
   auto self = shared_from_this();
   asio::post(strand_, [this, self] {
-    static constexpr bool close_connection = false;
+    static constexpr bool close_connection = true;
     dispose(close_connection);
   });
 }
@@ -189,7 +189,7 @@ void AsyncTlsConnection::dispose(bool close_connection) {
   // started to be used. In the case of a server connection failing authentication, it will have no
   // corresponding peer_id_.
   if (disposed_ || !peer_id_.has_value()) return;
-  LOG_WARN(logger_, "Closing connection to node " << peer_id_.value());
+  LOG_WARN(logger_, "Closing connection to node " << peer_id_.value() << " close_connection = " << close_connection);
   disposed_ = true;
   read_timer_.cancel();
   write_timer_.cancel();

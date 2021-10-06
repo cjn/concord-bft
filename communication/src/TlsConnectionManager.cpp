@@ -73,7 +73,7 @@ void ConnectionManager::stop() {
 
   for (auto& [id, conn] : connections_) {
     LOG_DEBUG(logger_, "Closing connection from: " << config_.selfId << ", to: " << id);
-    syncCloseConnection(conn);
+    closeConnection(conn);
   }
 }
 
@@ -171,6 +171,8 @@ void ConnectionManager::remoteCloseConnection(NodeNum id) {
     // the connection, but that the socket gets closed resulting in a simultaneous call here to
     // remoteCloseConnection from the AsyncTlsConnection. In this case, the connection may already
     // have been erased.
+
+    LOG_INFO(logger_, "Entering remoteCloseConnection");
     if (!connections_.count(id)) return;
 
     LOG_INFO(logger_, "Closing connection from: " << config_.selfId << ", to: " << id);
