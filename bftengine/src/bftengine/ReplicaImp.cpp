@@ -239,7 +239,7 @@ void ReplicaImp::onMessage<ClientRequestMsg>(ClientRequestMsg *m) {
   }
 
   if ((isCurrentPrimary() && isSeqNumToStopAt(primaryLastUsedSeqNum + 1)) || isSeqNumToStopAt(lastExecutedSeqNum + 1)) {
-    LOG_WARN(CNSUS,
+    LOG_INFO(CNSUS,
              "Ignoring ClientRequest because system is stopped at checkpoint pending control state operation (upgrade, "
              "etc...)");
     delete m;
@@ -247,7 +247,6 @@ void ReplicaImp::onMessage<ClientRequestMsg>(ClientRequestMsg *m) {
   }
 
   if (!currentViewIsActive()) {
-    LOG_WARN(CNSUS, "ClientRequestMsg is ignored because current view is inactive. " << KVLOG(reqSeqNum, clientId));
     delete m;
     return;
   }
@@ -257,14 +256,14 @@ void ReplicaImp::onMessage<ClientRequestMsg>(ClientRequestMsg *m) {
       histograms_.requestsQueueOfPrimarySize->record(requestsQueueOfPrimary.size());
       // TODO(GG): use config/parameter
       if (requestsQueueOfPrimary.size() >= maxPrimaryQueueSize) {
-        LOG_WARN(GL,
+        LOG_WARN(CNSUS,
                  "ClientRequestMsg dropped. Primary request queue is full. "
                      << KVLOG(clientId, reqSeqNum, requestsQueueOfPrimary.size()));
         delete m;
         return;
       }
       if (clientsManager->canBecomePending(clientId, reqSeqNum)) {
-        LOG_INFO(CNSUS, "Pushing to primary queue, request " << KVLOG(reqSeqNum, clientId, senderId));
+        LOG_DEBUG(CNSUS, "Pushing to primary queue, request " << KVLOG(reqSeqNum, clientId, senderId));
         if (time_to_collect_batch_ == MinTime) time_to_collect_batch_ = getMonotonicTime();
         requestsQueueOfPrimary.push(m);
         primaryCombinedReqSize += m->size();
@@ -272,7 +271,7 @@ void ReplicaImp::onMessage<ClientRequestMsg>(ClientRequestMsg *m) {
         tryToSendPrePrepareMsg(true);
         return;
       } else {
-        LOG_WARN(GL,
+        LOG_INFO(CNSUS,
                  "ClientRequestMsg is ignored because: request is old, or primary is currently working on it"
                      << KVLOG(clientId, reqSeqNum));
       }
@@ -282,13 +281,13 @@ void ReplicaImp::onMessage<ClientRequestMsg>(ClientRequestMsg *m) {
 
         // TODO(GG): add a mechanism that retransmits (otherwise we may start unnecessary view-change)
         send(m, currentPrimary());
-        LOG_INFO(GL, "Forwarding ClientRequestMsg to the current primary." << KVLOG(reqSeqNum, clientId));
+        LOG_INFO(CNSUS, "Forwarding ClientRequestMsg to the current primary." << KVLOG(reqSeqNum, clientId));
       }
       if (clientsManager->isPending(clientId, reqSeqNum)) {
         // As long as this request is not committed, we want to continue and alert the primary about it
         send(m, currentPrimary());
       } else {
-        LOG_INFO(GL,
+        LOG_INFO(CNSUS,
                  "ClientRequestMsg is ignored because: request is old, or primary is currently working on it"
                      << KVLOG(clientId, reqSeqNum));
       }
@@ -296,7 +295,7 @@ void ReplicaImp::onMessage<ClientRequestMsg>(ClientRequestMsg *m) {
   } else {  // Reply has already been sent to the client for this request
     auto repMsg = clientsManager->allocateReplyFromSavedOne(clientId, reqSeqNum, currentPrimary());
     LOG_DEBUG(
-        GL,
+        CNSUS,
         "ClientRequestMsg has already been executed: retransmitting reply to client." << KVLOG(reqSeqNum, clientId));
     if (repMsg) {
       send(repMsg.get(), clientId);
@@ -636,8 +635,8 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
 
   LOG_INFO(CNSUS,
            "Sending PrePrepare message" << KVLOG(pp->numberOfRequests())
-                                        << " correlation ids: " << pp->getBatchCorrelationIdAsString()
-                                        << " commit path: " << CommitPathToStr(firstPath));
+                                        << " correlation ids: " << pp->getBatchCorrelationIdAsString());
+
   consensus_times_.start(primaryLastUsedSeqNum);
 
   SeqNumInfo &seqNumInfo = mainLog->get(primaryLastUsedSeqNum);
@@ -699,7 +698,7 @@ bool ReplicaImp::relevantMsgForActiveView(const T *msg) {
 
     return true;
   } else if (!isCurrentViewActive) {
-    LOG_WARN(GL,
+    LOG_INFO(CNSUS,
              "My current view is not active, ignoring msg."
                  << KVLOG(getCurrentView(), isCurrentViewActive, msg->senderId(), msgSeqNum, msgViewNum));
     return false;
@@ -709,7 +708,7 @@ bool ReplicaImp::relevantMsgForActiveView(const T *msg) {
     const bool myReplicaMayBeBehind = (getCurrentView() < msgViewNum) || (msgSeqNum > activeWindowEnd);
     if (myReplicaMayBeBehind) {
       onReportAboutAdvancedReplica(msg->senderId(), msgSeqNum, msgViewNum);
-      LOG_WARN(GL,
+      LOG_INFO(CNSUS,
                "Msg is not relevant for my current view. The sending replica may be in advance."
                    << KVLOG(getCurrentView(),
                             isCurrentViewActive,
@@ -724,8 +723,8 @@ bool ReplicaImp::relevantMsgForActiveView(const T *msg) {
 
       if (msgReplicaMayBeBehind) {
         onReportAboutLateReplica(msg->senderId(), msgSeqNum, msgViewNum);
-        LOG_WARN(
-            GL,
+        LOG_INFO(
+            CNSUS,
             "Msg is not relevant for my current view. The sending replica may be behind." << KVLOG(getCurrentView(),
                                                                                                    isCurrentViewActive,
                                                                                                    msg->senderId(),
@@ -805,10 +804,10 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
     ConcordAssert(!msg->isNull());  // we should never send (and never accept) null PrePrepare message
 
     if (viewsManager->addPotentiallyMissingPP(msg, lastStableSeqNum)) {
-      LOG_INFO(GL, "PrePrepare added to views manager. " << KVLOG(lastStableSeqNum));
+      LOG_INFO(CNSUS, "PrePrepare added to views manager. " << KVLOG(lastStableSeqNum));
       tryToEnterView();
     } else {
-      LOG_INFO(GL, "PrePrepare discarded.");
+      LOG_INFO(CNSUS, "PrePrepare discarded.");
     }
 
     return;  // TODO(GG): memory deallocation is confusing .....
@@ -823,7 +822,7 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
     bool time_is_ok = true;
     if (config_.timeServiceEnabled && msg->numberOfRequests() > 0) {
       if (!time_service_manager_->hasTimeRequest(*msg)) {
-        LOG_ERROR(GL, "PrePrepare will be ignored");
+        LOG_ERROR(CNSUS, "PrePrepare will be ignored");
         delete msg;
         return;
       }
@@ -1055,9 +1054,7 @@ void ReplicaImp::sendPartialProof(SeqNumInfo &seqNumInfo) {
 
   if (!partialProofs.hasFullProof()) {
     // send PartialCommitProofMsg to all collectors
-    LOG_INFO(CNSUS,
-             "Sending PartialCommitProofMsg, sequence number:" << pp->seqNumber() << ", commit path: "
-                                                               << CommitPathToStr(pp->firstPath()));
+    LOG_INFO(CNSUS, "Sending PartialCommitProofMsg, sequence number:" << pp->seqNumber());
 
     PartialCommitProofMsg *part = partialProofs.getSelfPartialCommitProof();
 
@@ -1108,10 +1105,8 @@ void ReplicaImp::sendPreparePartial(SeqNumInfo &seqNumInfo) {
     PrePrepareMsg *pp = seqNumInfo.getPrePrepareMsg();
 
     ConcordAssertNE(pp, nullptr);
-
-    LOG_DEBUG(CNSUS,
-              "Sending PreparePartialMsg, sequence number:" << pp->seqNumber()
-                                                            << ", commit path: " << CommitPathToStr(pp->firstPath()));
+    SCOPED_MDC_PATH(CommitPathToMDCString(pp->firstPath()));
+    LOG_DEBUG(CNSUS, "Sending PreparePartialMsg, sequence number:" << pp->seqNumber());
 
     const auto &span_context = pp->spanContext<std::remove_pointer<decltype(pp)>::type>();
     PreparePartialMsg *p =
@@ -1143,9 +1138,7 @@ void ReplicaImp::sendCommitPartial(const SeqNum s) {
 
   if (seqNumInfo.committedOrHasCommitPartialFromReplica(config_.getreplicaId())) return;  // not needed
 
-  LOG_INFO(CNSUS,
-           "Sending CommitPartialMsg, sequence number:" << pp->seqNumber()
-                                                        << ", commit path: " << CommitPathToStr(pp->firstPath()));
+  LOG_INFO(CNSUS, "Sending CommitPartialMsg, sequence number:" << pp->seqNumber());
 
   Digest d;
   Digest::digestOfDigest(pp->digestOfRequests(), d);
@@ -1213,10 +1206,9 @@ void ReplicaImp::onMessage<FullCommitProofMsg>(FullCommitProofMsg *msg) {
   SCOPED_MDC_SEQ_NUM(std::to_string(msg->seqNumber()));
   SCOPED_MDC_PATH(CommitPathToMDCString(CommitPath::OPTIMISTIC_FAST));
 
-  LOG_INFO(CNSUS,
-           "Reached consensus, Received FullCommitProofMsg message. "
-               << KVLOG(msg->senderId(), msgSeqNum, msg->size())
-               << ", commit path: " << CommitPathToStr(CommitPath::OPTIMISTIC_FAST));
+  LOG_INFO(
+      CNSUS,
+      "Reached consensus, Received FullCommitProofMsg message. " << KVLOG(msg->senderId(), msgSeqNum, msg->size()));
 
   if (relevantMsgForActiveView(msg)) {
     SeqNumInfo &seqNumInfo = mainLog->get(msgSeqNum);
@@ -1248,7 +1240,7 @@ void ReplicaImp::onMessage<FullCommitProofMsg>(FullCommitProofMsg *msg) {
       return;
     } else if (pps.hasFullProof()) {
       const auto fullProofCollectorId = pps.getFullProof()->senderId();
-      LOG_INFO(GL,
+      LOG_INFO(CNSUS,
                "FullCommitProof for seq num " << msgSeqNum << " was already received from replica "
                                               << fullProofCollectorId << " and has been processed."
                                               << " Ignoring the FullCommitProof from replica " << msg->senderId());
@@ -1436,9 +1428,7 @@ void ReplicaImp::onMessage<PreparePartialMsg>(PreparePartialMsg *msg) {
 
     sendAckIfNeeded(msg, msgSender, msgSeqNum);
 
-    LOG_INFO(CNSUS,
-             "Received relevant PreparePartialMsg. " << KVLOG(msgSender, msgSeqNum, msg->size())
-                                                     << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
+    LOG_INFO(CNSUS, "Received relevant PreparePartialMsg. " << KVLOG(msgSender, msgSeqNum, msg->size()));
 
     controller->onMessage(msg);
 
@@ -1462,9 +1452,9 @@ void ReplicaImp::onMessage<PreparePartialMsg>(PreparePartialMsg *msg) {
   }
 
   if (!msgAdded) {
-    LOG_DEBUG(CNSUS,
-              "Node " << config_.getreplicaId() << " ignored the PreparePartialMsg from node " << msgSender
-                      << " (seqNumber " << msgSeqNum << ")");
+    LOG_INFO(CNSUS,
+             "Node " << config_.getreplicaId() << " ignored the PreparePartialMsg from node " << msgSender
+                     << " (seqNumber " << msgSeqNum << ")");
     delete msg;
   }
 }
@@ -1489,9 +1479,7 @@ void ReplicaImp::onMessage<CommitPartialMsg>(CommitPartialMsg *msg) {
 
     sendAckIfNeeded(msg, msgSender, msgSeqNum);
 
-    LOG_INFO(CNSUS,
-             "Received CommitPartialMsg. " << KVLOG(msgSender, msgSeqNum, msg->size())
-                                           << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
+    LOG_INFO(CNSUS, "Received CommitPartialMsg. " << KVLOG(msgSender, msgSeqNum, msg->size()));
 
     SeqNumInfo &seqNumInfo = mainLog->get(msgSeqNum);
 
@@ -1509,7 +1497,7 @@ void ReplicaImp::onMessage<CommitPartialMsg>(CommitPartialMsg *msg) {
   }
 
   if (!msgAdded) {
-    LOG_WARN(GL, "Ignored CommitPartialMsg. " << KVLOG(msgSender));
+    LOG_INFO(CNSUS, "Ignored CommitPartialMsg. " << KVLOG(msgSender));
     delete msg;
   }
 }
@@ -1530,9 +1518,7 @@ void ReplicaImp::onMessage<PrepareFullMsg>(PrepareFullMsg *msg) {
   if (relevantMsgForActiveView(msg)) {
     sendAckIfNeeded(msg, msgSender, msgSeqNum);
 
-    LOG_INFO(CNSUS,
-             "Received PrepareFullMsg. " << KVLOG(msgSender, msgSeqNum, msg->size())
-                                         << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
+    LOG_INFO(CNSUS, "Received PrepareFullMsg. " << KVLOG(msgSender, msgSeqNum, msg->size()));
 
     SeqNumInfo &seqNumInfo = mainLog->get(msgSeqNum);
 
@@ -1554,7 +1540,7 @@ void ReplicaImp::onMessage<PrepareFullMsg>(PrepareFullMsg *msg) {
   }
 
   if (!msgAdded) {
-    LOG_WARN(CNSUS, "Ignored PrepareFullMsg." << KVLOG(msgSender));
+    LOG_INFO(CNSUS, "Ignored PrepareFullMsg." << KVLOG(msgSender));
     delete msg;
   }
 }
@@ -1574,9 +1560,7 @@ void ReplicaImp::onMessage<CommitFullMsg>(CommitFullMsg *msg) {
   if (relevantMsgForActiveView(msg)) {
     sendAckIfNeeded(msg, msgSender, msgSeqNum);
 
-    LOG_INFO(CNSUS,
-             "Received CommitFullMsg. " << KVLOG(msgSender, msgSeqNum, msg->size())
-                                        << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
+    LOG_INFO(CNSUS, "Received CommitFullMsg. " << KVLOG(msgSender, msgSeqNum, msg->size()));
 
     SeqNumInfo &seqNumInfo = mainLog->get(msgSeqNum);
 
@@ -1596,7 +1580,7 @@ void ReplicaImp::onMessage<CommitFullMsg>(CommitFullMsg *msg) {
   }
 
   if (!msgAdded) {
-    LOG_WARN(CNSUS,
+    LOG_INFO(CNSUS,
              "Node " << config_.getreplicaId() << " ignored the CommitFullMsg from node " << msgSender << " (seqNumber "
                      << msgSeqNum << ")");
     delete msg;
@@ -1609,11 +1593,11 @@ void ReplicaImp::onPrepareCombinedSigFailed(SeqNum seqNumber,
   LOG_WARN(THRESHSIGN_LOG, KVLOG(seqNumber, view));
   if (isCollectingState() && mainLog->insideActiveWindow(seqNumber)) {
     mainLog->get(seqNumber).resetPrepareSignatures();
-    LOG_INFO(GL, "Collecting state, reset prepare signatures");
+    LOG_INFO(CNSUS, "Collecting state, reset prepare signatures");
     return;
   }
   if ((!currentViewIsActive()) || (getCurrentView() != view) || (!mainLog->insideActiveWindow(seqNumber))) {
-    LOG_WARN(GL, "Dropping irrelevant signature." << KVLOG(seqNumber, view));
+    LOG_WARN(CNSUS, "Dropping irrelevant signature." << KVLOG(seqNumber, view));
 
     return;
   }
@@ -1637,13 +1621,11 @@ void ReplicaImp::onPrepareCombinedSigSucceeded(SeqNum seqNumber,
 
   if (isCollectingState() && mainLog->insideActiveWindow(seqNumber)) {
     mainLog->get(seqNumber).resetPrepareSignatures();
-    LOG_INFO(GL, "Collecting state, reset prepare signatures");
+    LOG_INFO(CNSUS, "Collecting state, reset prepare signatures");
     return;
   }
   if ((!currentViewIsActive()) || (getCurrentView() != view) || (!mainLog->insideActiveWindow(seqNumber))) {
-    LOG_WARN(GL,
-             "Not sending prepare full: Invalid view, or sequence number."
-                 << KVLOG(view, getCurrentView()) << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
+    LOG_INFO(CNSUS, "Not sending prepare full: Invalid view, or sequence number." << KVLOG(view, getCurrentView()));
     return;
   }
 
@@ -1658,8 +1640,7 @@ void ReplicaImp::onPrepareCombinedSigSucceeded(SeqNum seqNumber,
   ConcordAssertNE(preFull, nullptr);
 
   if (fcp != nullptr) return;  // don't send if we already have FullCommitProofMsg
-  LOG_INFO(CNSUS,
-           "Sending prepare full" << KVLOG(view, seqNumber) << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
+  LOG_INFO(CNSUS, "Sending prepare full" << KVLOG(view, seqNumber));
   if (ps_) {
     ps_->beginWriteTran();
     ps_->setPrepareFullMsgInSeqNumWindow(seqNumber, preFull);
@@ -1687,12 +1668,12 @@ void ReplicaImp::onPrepareVerifyCombinedSigResult(SeqNum seqNumber, ViewNum view
 
   if (isCollectingState() && mainLog->insideActiveWindow(seqNumber)) {
     mainLog->get(seqNumber).resetPrepareSignatures();
-    LOG_INFO(GL, "Collecting state, reset prepare signatures");
+    LOG_INFO(CNSUS, "Collecting state, reset prepare signatures");
     return;
   }
 
   if ((!currentViewIsActive()) || (getCurrentView() != view) || (!mainLog->insideActiveWindow(seqNumber))) {
-    LOG_WARN(GL,
+    LOG_INFO(CNSUS,
              "Not sending commit partial: Invalid view, or sequence number."
                  << KVLOG(seqNumber, view, getCurrentView(), mainLog->insideActiveWindow(seqNumber)));
     return;
@@ -1728,12 +1709,12 @@ void ReplicaImp::onCommitCombinedSigFailed(SeqNum seqNumber,
 
   if (isCollectingState() && mainLog->insideActiveWindow(seqNumber)) {
     mainLog->get(seqNumber).resetCommitSignatres();
-    LOG_INFO(GL, "Collecting state, reset commit signatures");
+    LOG_INFO(CNSUS, "Collecting state, reset commit signatures");
     return;
   }
 
   if ((!currentViewIsActive()) || (getCurrentView() != view) || (!mainLog->insideActiveWindow(seqNumber))) {
-    LOG_WARN(GL, "Invalid view, or sequence number." << KVLOG(seqNumber, view, getCurrentView()));
+    LOG_INFO(CNSUS, "Invalid view, or sequence number." << KVLOG(seqNumber, view, getCurrentView()));
     return;
   }
 
@@ -1756,12 +1737,12 @@ void ReplicaImp::onCommitCombinedSigSucceeded(SeqNum seqNumber,
 
   if (isCollectingState() && mainLog->insideActiveWindow(seqNumber)) {
     mainLog->get(seqNumber).resetCommitSignatres();
-    LOG_INFO(GL, "Collecting state, reset commit signatures");
+    LOG_INFO(CNSUS, "Collecting state, reset commit signatures");
     return;
   }
 
   if ((!currentViewIsActive()) || (getCurrentView() != view) || (!mainLog->insideActiveWindow(seqNumber))) {
-    LOG_WARN(GL,
+    LOG_INFO(CNSUS,
              "Not sending full commit: Invalid view, or sequence number."
                  << KVLOG(view, getCurrentView(), mainLog->insideActiveWindow(seqNumber)));
     return;
@@ -1776,8 +1757,7 @@ void ReplicaImp::onCommitCombinedSigSucceeded(SeqNum seqNumber,
 
   ConcordAssertNE(commitFull, nullptr);
   if (fcp != nullptr) return;  // ignore if we already have FullCommitProofMsg
-  LOG_INFO(CNSUS,
-           "Sending full commit." << KVLOG(view, seqNumber) << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
+  LOG_INFO(CNSUS, "Sending full commit." << KVLOG(view, seqNumber));
   if (ps_) {
     ps_->beginWriteTran();
     ps_->setCommitFullMsgInSeqNumWindow(seqNumber, commitFull);
@@ -1815,13 +1795,13 @@ void ReplicaImp::onCommitVerifyCombinedSigResult(SeqNum seqNumber, ViewNum view,
 
   if (isCollectingState() && mainLog->insideActiveWindow(seqNumber)) {
     mainLog->get(seqNumber).resetCommitSignatres();
-    LOG_INFO(GL, "Collecting state, reset commit signatures");
+    LOG_INFO(CNSUS, "Collecting state, reset commit signatures");
     return;
   }
 
   if ((!currentViewIsActive()) || (getCurrentView() != view) || (!mainLog->insideActiveWindow(seqNumber))) {
-    LOG_WARN(
-        GL,
+    LOG_INFO(
+        CNSUS,
         "Invalid view, or sequence number." << KVLOG(view, getCurrentView(), mainLog->insideActiveWindow(seqNumber)));
     return;
   }
@@ -1841,9 +1821,8 @@ void ReplicaImp::onCommitVerifyCombinedSigResult(SeqNum seqNumber, ViewNum view,
     ps_->setCommitFullMsgInSeqNumWindow(seqNumber, commitFull);
     ps_->endWriteTran();
   }
-  LOG_INFO(CNSUS,
-           "Request committed, proceeding to try to execute" << KVLOG(view)
-                                                             << ", commit path: " << CommitPathToStr(CommitPath::SLOW));
+  LOG_INFO(CNSUS, "Request committed, proceeding to try to execute" << KVLOG(view));
+
   auto span = concordUtils::startChildSpanFromContext(
       commitFull->spanContext<std::remove_pointer<decltype(commitFull)>::type>(), "bft_execute_committed_reqs");
   bool askForMissingInfoAboutCommittedItems = (seqNumber > lastExecutedSeqNum + config_.getconcurrencyLevel());
@@ -2164,10 +2143,6 @@ void ReplicaImp::onMessage<ReplicaStatusMsg>(ReplicaStatusMsg *msg) {
   const SeqNum msgLastStable = msg->getLastStableSeqNum();
   const ViewNum msgViewNum = msg->getViewNumber();
   if (msgLastStable % checkpointWindowSize != 0) {
-    LOG_ERROR(CNSUS,
-              "ERROR detected in peer msgSenderId = "
-                  << msgSenderId << ". Reported Last Stable Sequence not consistent with checkpointWindowSize "
-                  << KVLOG(msgLastStable, checkpointWindowSize));
     return;
   }
 
@@ -2183,7 +2158,8 @@ void ReplicaImp::onMessage<ReplicaStatusMsg>(ReplicaStatusMsg *msg) {
 
     if (checkMsg == nullptr || !checkMsg->isStableState()) {
       LOG_WARN(
-          GL, "Misalignment in lastStableSeqNum and my CheckpointMsg for it" << KVLOG(lastStableSeqNum, msgLastStable));
+          CNSUS,
+          "Misalignment in lastStableSeqNum and my CheckpointMsg for it" << KVLOG(lastStableSeqNum, msgLastStable));
     }
 
     auto &checkpointInfo = checkpointsLog->get(lastStableSeqNum);
@@ -3131,7 +3107,7 @@ void ReplicaImp::onMessage<ReqMissingDataMsg>(ReqMissingDataMsg *msg) {
   const SeqNum msgSeqNum = msg->seqNumber();
   const ReplicaId msgSender = msg->senderId();
   SCOPED_MDC_SEQ_NUM(std::to_string(msgSeqNum));
-  LOG_INFO(GL, "Received ReqMissingDataMsg. " << KVLOG(msgSender, msg->getFlags(), msg->getFlagsAsBits()));
+  LOG_INFO(CNSUS, "Received ReqMissingDataMsg. " << KVLOG(msgSender, msg->getFlags(), msg->getFlagsAsBits()));
   if ((currentViewIsActive()) && (mainLog->insideActiveWindow(msgSeqNum) || mainLog->isPressentInHistory(msgSeqNum))) {
     SeqNumInfo &seqNumInfo = mainLog->getFromActiveWindowOrHistory(msgSeqNum);
 
@@ -3152,14 +3128,14 @@ void ReplicaImp::onMessage<ReqMissingDataMsg>(ReqMissingDataMsg *msg) {
     if (msg->getFullCommitIsMissing()) {
       CommitFullMsg *c = seqNumInfo.getValidCommitFullMsg();
       if (c != nullptr) {
-        LOG_DEBUG(GL, "Sending FullCommit message as a response of RFMD" << KVLOG(msgSender, msgSeqNum));
+        LOG_INFO(CNSUS, "Sending FullCommit message as a response of RFMD" << KVLOG(msgSender, msgSeqNum));
         sendAndIncrementMetric(c, msgSender, metric_sent_commitFull_msg_due_to_reqMissingData_);
       }
     }
 
     if (msg->getFullCommitProofIsMissing() && seqNumInfo.partialProofs().hasFullProof()) {
       FullCommitProofMsg *fcp = seqNumInfo.partialProofs().getFullProof();
-      LOG_DEBUG(GL, "Sending FullCommitProof message as a response of RFMD" << KVLOG(msgSender, msgSeqNum));
+      LOG_INFO(CNSUS, "Sending FullCommitProof message as a response of RFMD" << KVLOG(msgSender, msgSeqNum));
       sendAndIncrementMetric(fcp, msgSender, metric_sent_fullCommitProof_msg_due_to_reqMissingData_);
     }
 
@@ -3168,7 +3144,7 @@ void ReplicaImp::onMessage<ReqMissingDataMsg>(ReqMissingDataMsg *msg) {
       PartialCommitProofMsg *pcf = seqNumInfo.partialProofs().getSelfPartialCommitProof();
 
       if (pcf != nullptr) {
-        LOG_DEBUG(GL, "Sending PartialProof message as a response of RFMD" << KVLOG(msgSender, msgSeqNum));
+        LOG_INFO(CNSUS, "Sending PartialProof message as a response of RFMD" << KVLOG(msgSender, msgSeqNum));
         sendAndIncrementMetric(pcf, msgSender, metric_sent_partialCommitProof_msg_due_to_reqMissingData_);
       }
     }
@@ -3177,7 +3153,7 @@ void ReplicaImp::onMessage<ReqMissingDataMsg>(ReqMissingDataMsg *msg) {
       PreparePartialMsg *pr = seqNumInfo.getSelfPreparePartialMsg();
 
       if (pr != nullptr) {
-        LOG_DEBUG(GL, "Sending PartialPrepare message as a response of RFMD" << KVLOG(msgSender, msgSeqNum));
+        LOG_INFO(CNSUS, "Sending PartialPrepare message as a response of RFMD" << KVLOG(msgSender, msgSeqNum));
         sendAndIncrementMetric(pr, msgSender, metric_sent_preparePartial_msg_due_to_reqMissingData_);
       }
     }
@@ -3186,7 +3162,7 @@ void ReplicaImp::onMessage<ReqMissingDataMsg>(ReqMissingDataMsg *msg) {
       PrepareFullMsg *pf = seqNumInfo.getValidPrepareFullMsg();
 
       if (pf != nullptr) {
-        LOG_DEBUG(GL, "Sending FullPrepare message as a response of RFMD" << KVLOG(msgSender, msgSeqNum));
+        LOG_INFO(CNSUS, "Sending FullPrepare message as a response of RFMD" << KVLOG(msgSender, msgSeqNum));
         sendAndIncrementMetric(pf, msgSender, metric_sent_prepareFull_msg_due_to_reqMissingData_);
       }
     }
@@ -3194,12 +3170,12 @@ void ReplicaImp::onMessage<ReqMissingDataMsg>(ReqMissingDataMsg *msg) {
     if (msg->getPartialCommitIsMissing() && (currentPrimary() == msgSender)) {
       CommitPartialMsg *c = seqNumInfo.getSelfCommitPartialMsg();
       if (c != nullptr) {
-        LOG_DEBUG(GL, "Sending PartialCommit message as a response of RFMD" << KVLOG(msgSender, msgSeqNum));
+        LOG_INFO(CNSUS, "Sending PartialCommit message as a response of RFMD" << KVLOG(msgSender, msgSeqNum));
         sendAndIncrementMetric(c, msgSender, metric_sent_commitPartial_msg_due_to_reqMissingData_);
       }
     }
   } else {
-    LOG_INFO(GL,
+    LOG_INFO(CNSUS,
              "Ignore the ReqMissingDataMsg message. " << KVLOG(msgSender,
                                                                currentViewIsActive(),
                                                                mainLog->insideActiveWindow(msgSeqNum),
@@ -3276,7 +3252,7 @@ void ReplicaImp::onViewsChangeTimer(Timers::Handle timer)  // TODO(GG): review/u
     clientsManager->logAllPendingRequestsExceedingThreshold(viewChangeTimeout / 2, currTime);
 
     if ((diffMilli1 > viewChangeTimeout) && (diffMilli2 > viewChangeTimeout) && (diffMilli3 > viewChangeTimeout)) {
-      LOG_ERROR(
+      LOG_INFO(
           VC_LOG,
           "Ask to leave view=" << getCurrentView() << " (" << diffMilli3
                                << " ms after the earliest pending client request)."
@@ -3342,10 +3318,10 @@ void ReplicaImp::onMessage<SimpleAckMsg>(SimpleAckMsg *msg) {
   SCOPED_MDC_SEQ_NUM(std::to_string(msg->seqNumber()));
   uint16_t relatedMsgType = (uint16_t)msg->ackData();  // TODO(GG): does this make sense ?
   if (retransmissionsLogicEnabled) {
-    LOG_DEBUG(MSGS, "Received SimpleAckMsg" << KVLOG(msg->senderId(), msg->seqNumber(), relatedMsgType));
+    LOG_DEBUG(CNSUS, "Received SimpleAckMsg" << KVLOG(msg->senderId(), msg->seqNumber(), relatedMsgType));
     retransmissionsManager->onAck(msg->senderId(), msg->seqNumber(), relatedMsgType);
   } else {
-    LOG_WARN(GL, "Received Ack, but retransmissions not enabled. " << KVLOG(msg->senderId(), relatedMsgType));
+    LOG_WARN(CNSUS, "Received Ack, but retransmissions not enabled. " << KVLOG(msg->senderId(), relatedMsgType));
   }
 
   delete msg;
@@ -3812,7 +3788,7 @@ ReplicaImp::ReplicaImp(bool firstTime,
       time_in_state_transfer_(histograms_.timeInStateTransfer),
       reqBatchingLogic_(*this, config_, metrics_, timers),
       replStatusHandlers_(*this) {
-  LOG_INFO(GL, "");
+  LOG_INFO(GL, "Initialising Replica");
   ConcordAssertLT(config_.getreplicaId(), config_.getnumReplicas());
   // TODO(GG): more asserts on params !!!!!!!!!!!
 
@@ -4134,7 +4110,7 @@ void ReplicaImp::executeRequestsInPrePrepareMsg(concordUtils::SpanWrapper &paren
         const bool validClient = isValidClient(clientId);
         if (!validClient) {
           ++numInvalidClients;
-          LOG_WARN(GL, "The client is not valid" << KVLOG(clientId));
+          LOG_WARN(CNSUS, "The client is not valid" << KVLOG(clientId));
           reqIdx++;
           continue;
         }
