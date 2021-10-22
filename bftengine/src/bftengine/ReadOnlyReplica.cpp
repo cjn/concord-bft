@@ -41,7 +41,7 @@ ReadOnlyReplica::ReadOnlyReplica(const ReplicaConfig &config,
                   metrics_.RegisterCounter("sentAskForCheckpointMsgs"),
                   metrics_.RegisterCounter("receivedInvalidMsgs"),
                   metrics_.RegisterGauge("lastExecutedSeqNum", lastExecutedSeqNum)} {
-  LOG_INFO(GL, "");
+  LOG_INFO(GL, "Initialising ReadOnly Replica");
   repsInfo = new ReplicasInfo(config, dynamicCollectorForPartialProofs, dynamicCollectorForExecutionProofs);
   msgHandlers_->registerMsgHandler(
       MsgCode::Checkpoint, std::bind(&ReadOnlyReplica::messageHandler<CheckpointMsg>, this, std::placeholders::_1));

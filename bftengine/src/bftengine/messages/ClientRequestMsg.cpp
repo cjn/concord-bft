@@ -102,12 +102,12 @@ void ClientRequestMsg::validateImp(const ReplicasInfo& repInfo) const {
 
   if (!repInfo.isValidPrincipalId(clientId)) {
     msg << "Invalid clientId " << clientId;
-    LOG_ERROR(GL, msg.str());
+    LOG_ERROR(CNSUS, msg.str());
     throw std::runtime_error(msg.str());
   }
   if (!repInfo.isValidPrincipalId(this->senderId())) {
     msg << "Invalid senderId " << this->senderId();
-    LOG_ERROR(GL, msg.str());
+    LOG_ERROR(CNSUS, msg.str());
     throw std::runtime_error(msg.str());
   }
   if (isIdOfExternalClient && isClientTransactionSigningEnabled) {
@@ -143,7 +143,7 @@ void ClientRequestMsg::validateImp(const ReplicasInfo& repInfo) const {
                  header->reqSignatureLength,
                  isIdOfExternalClient,
                  isClientTransactionSigningEnabled);
-    LOG_ERROR(GL, msg.str());
+    LOG_ERROR(CNSUS, msg.str());
     throw std::runtime_error(msg.str());
   }
   auto expectedMsgSize = sizeof(ClientRequestMsgHeader) + header->requestLength + header->cidLength +
@@ -151,14 +151,14 @@ void ClientRequestMsg::validateImp(const ReplicasInfo& repInfo) const {
 
   if ((msgSize < minMsgSize) || (msgSize != expectedMsgSize)) {
     msg << "Invalid msgSize: " << KVLOG(msgSize, minMsgSize, expectedMsgSize);
-    LOG_ERROR(GL, msg.str());
+    LOG_ERROR(CNSUS, msg.str());
     throw std::runtime_error(msg.str());
   }
   if (doSigVerify) {
     if (!sigManager->verifySig(
             clientId, requestBuf(), header->requestLength, requestSignature(), header->reqSignatureLength)) {
       std::stringstream msg;
-      LOG_ERROR(GL, "Signature verification failed for " << KVLOG(header->reqSeqNum, this->senderId(), clientId));
+      LOG_ERROR(CNSUS, "Signature verification failed for " << KVLOG(header->reqSeqNum, this->senderId(), clientId));
       msg << "Signature verification failed for: "
           << KVLOG(clientId,
                    this->senderId(),
@@ -169,7 +169,7 @@ void ClientRequestMsg::validateImp(const ReplicasInfo& repInfo) const {
                    this->senderId());
       throw std::runtime_error(msg.str());
     }
-    LOG_TRACE(GL, "Signature verified for " << KVLOG(header->reqSeqNum, this->senderId(), clientId));
+    LOG_TRACE(CNSUS, "Signature verified for " << KVLOG(header->reqSeqNum, this->senderId(), clientId));
   }
 }
 
