@@ -210,7 +210,9 @@ void ConnectionManager::onServerHandshakeComplete(const asio::error_code& ec, si
   status_->num_accepted_waiting_for_handshake = accepted_waiting_for_handshake_.size();
   if (ec) {
     auto peer_str = conn->getPeerId().has_value() ? std::to_string(conn->getPeerId().value()) : "Unknown";
-    LOG_WARN(logger_, "Server handshake failed for peer " << peer_str << ": " << ec.message());
+    LOG_WARN(logger_,
+             "Server handshake failed for peer " << peer_str << ", connection_id  " << accepted_connection_id << ": "
+                                                 << ec.message());
     return closeConnection(std::move(conn));
   }
   LOG_INFO(logger_, "Server handshake succeeded for peer " << conn->getPeerId().value());
@@ -222,7 +224,10 @@ void ConnectionManager::onClientHandshakeComplete(const asio::error_code& ec, No
   connected_waiting_for_handshake_.erase(destination);
   status_->num_connected_waiting_for_handshake = connected_waiting_for_handshake_.size();
   if (ec) {
-    LOG_WARN(logger_, "Client handshake failed for peer " << conn->getPeerId().value() << ": " << ec.message());
+    LOG_WARN(logger_,
+             "Client handshake failed for peer " << conn->getPeerId().value() << ", connection_id  " << destination
+                                                 << ": "
+                                                 << ": " << ec.message());
     return closeConnection(std::move(conn));
   }
   status_->total_connect_attempts_completed++;
@@ -273,7 +278,9 @@ void ConnectionManager::accept() {
       total_accepted_connections_++;
       status_->total_accepted_connections = total_accepted_connections_;
       setSocketOptions(sock);
-      LOG_INFO(logger_, "Accepted connection " << total_accepted_connections_);
+      LOG_INFO(logger_,
+               "Accepted connection " << total_accepted_connections_
+                                      << "IP = " << sock.remote_endpoint().address().to_string());
       startServerSSLHandshake(std::move(sock));
       StateControl::instance().unlockComm();
     }
