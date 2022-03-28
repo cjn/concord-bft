@@ -75,7 +75,7 @@ void RequestServiceCallData::sendToConcordClient() {
     msg = bft::client::Msg(request.begin(), request.end());
     is_any_request_type = true;
   } else {
-    msg = bft::client::Msg(request_.raw_request().begin(), request_.raw_request().end());
+    msg = bft::client::Msg(request_.request().begin(), request_.request().end());
   }
 
   auto seconds = std::chrono::seconds{request_.timeout().seconds()};
@@ -141,7 +141,7 @@ void RequestServiceCallData::sendToConcordClient() {
         return;
       }
     } else {
-      this->response_.set_raw_response(std::move(data));
+      this->response_.set_response(std::move(data));
     }
 
     this->populateResult(grpc::Status::OK);

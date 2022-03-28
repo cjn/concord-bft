@@ -35,10 +35,7 @@ service RequestService {
 
 message Request {
   // Required application request which gets evaluated by the execution engine.
-  oneof application_request {
-    bytes raw_request = 1;
-    google.protobuf.Any typed_request = 6;
-  }
+    bytes request = 1;
 
   // Required timeout which defines the maximum amount of time the caller is
   // willing to wait for the request to be processed by a quorum of replicas.
@@ -65,12 +62,13 @@ message Request {
   // `correlation_id` to a sequence number which can be used to track the request
   // in log messages in the blockchain network.
   optional string correlation_id = 5;
+    
+  google.protobuf.Any typed_request = 6;
 }
 
 message Response {
   // Application data returned by the execution engine.
-  oneof application_response {
-    bytes raw_response = 1;
+    bytes response = 1;
+
     google.protobuf.Any typed_response = 6;
-  } 
 }
