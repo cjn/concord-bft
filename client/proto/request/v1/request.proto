@@ -36,7 +36,7 @@ service RequestService {
 message Request {
   // Required application request which gets evaluated by the execution engine.
   oneof application_request {
-    bytes request = 1;
+    bytes raw_request = 1;
     google.protobuf.Any typed_request = 6;
   }
   // Required timeout which defines the maximum amount of time the caller is
@@ -70,7 +70,7 @@ message Request {
 message Response {
   // Application data returned by the execution engine.
 oneof application_response {
-    bytes response = 1;
+    bytes raw_response = 1;
     google.protobuf.Any typed_response = 6;
 }
 
