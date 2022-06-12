@@ -1368,6 +1368,7 @@ void PreProcessor::finalizePreProcessing(NodeIdType clientId, uint16_t reqOffset
         LOG_DEBUG(logger(),
                   "Pass PreProcessResultMsg to ReplicaImp for consensus"
                       << KVLOG(batchCid, reqSeqNum, reqCid, clientId, reqOffsetInBatch, preProcessResult));
+        LOG_INFO(logger(), ">>>Pre-process result size : " << preProcessMsg->size());
       } else {
         preProcessMsg = make_unique<ClientRequestMsg>(clientId,
                                                       HAS_PRE_PROCESSED_FLAG,
@@ -1882,6 +1883,7 @@ void PreProcessor::handleReqPreProcessedByNonPrimary(uint16_t clientId,
                                                   status,
                                                   preProcessResult,
                                                   myReplica_.getCurrentView());
+  LOG_INFO(logger(), ">>>Pre-process replyMsg size : " << replyMsg->size());
   const auto &batchEntry = ongoingReqBatches_[clientId];
   if (batchedPreProcessEnabled_ && batchEntry->isBatchInProcess()) {
     batchEntry->releaseReqsAndSendBatchedReplyIfCompleted(replyMsg);

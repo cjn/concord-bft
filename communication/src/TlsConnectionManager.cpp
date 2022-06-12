@@ -113,9 +113,12 @@ void ConnectionManager::startConnectTimer() {
 
 void ConnectionManager::send(const NodeNum destination, const std::shared_ptr<OutgoingMsg>& msg) {
   auto max_size = config_.bufferLength_ - MSG_HEADER_SIZE;
+  LOG_INFO(logger_,
+           ">>>ConnectionManager::send payload size: " << KVLOG(msg->payload_size(), max_size, MSG_HEADER_SIZE));
+
   if (msg->payload_size() > max_size) {
     status_->total_messages_dropped++;
-    LOG_ERROR(logger_, "Msg Dropped. Size exceeds max message size: " << KVLOG(msg->payload_size(), max_size));
+    LOG_ERROR(logger_, ">>>Msg Dropped. Size exceeds max message size: " << KVLOG(msg->payload_size(), max_size));
     return;
   }
   {
@@ -126,9 +129,12 @@ void ConnectionManager::send(const NodeNum destination, const std::shared_ptr<Ou
 
 void ConnectionManager::send(const std::set<NodeNum>& destinations, const std::shared_ptr<OutgoingMsg>& msg) {
   auto max_size = config_.bufferLength_ - MSG_HEADER_SIZE;
+  LOG_INFO(logger_,
+           ">>>ConnectionManager::send payload size: " << KVLOG(msg->payload_size(), max_size, MSG_HEADER_SIZE));
+
   if (msg->payload_size() > max_size) {
     status_->total_messages_dropped++;
-    LOG_ERROR(logger_, "Msg Dropped. Size exceeds max message size: " << KVLOG(msg->payload_size(), max_size));
+    LOG_ERROR(logger_, ">>>Msg Dropped. Size exceeds max message size: " << KVLOG(msg->payload_size(), max_size));
     return;
   }
   {
